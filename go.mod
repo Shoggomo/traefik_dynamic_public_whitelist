@@ -1,4 +1,4 @@
-module github.com/traefik/pluginproviderdemo
+module github.com/portbrella/traefik_whitelist
 
 go 1.17
 

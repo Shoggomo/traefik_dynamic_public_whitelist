@@ -1,10 +1,10 @@
-displayName: Provider Plugin Demo
+displayName: Portbrella Whitelist Provider
 type: provider
 iconPath: .assets/icon.png
 
-import: github.com/traefik/pluginproviderdemo
+import: github.com/portbrella/traefik_whitelist
 
-summary: '[Demo] Simple Provider Plugin'
+summary: 'Portbrella Whitelist Provider Plugin'
 
 testData:
   pollInterval: 5s
