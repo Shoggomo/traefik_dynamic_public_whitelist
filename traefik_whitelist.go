@@ -23,7 +23,7 @@ type Config struct {
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		PollInterval: "30s", // 30 * time.Second
+		PollInterval: "120s", // 120 * time.Second
 		Lists:        make(map[string]string),
 	}
 }
