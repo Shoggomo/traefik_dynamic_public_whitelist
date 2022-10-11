@@ -33,6 +33,7 @@ type Provider struct {
 	name         string
 	pollInterval time.Duration
 	lists        map[string]string
+	lists_data   map[string]string
 
 	cancel func()
 }
@@ -48,6 +49,7 @@ func New(ctx context.Context, config *Config, name string) (*Provider, error) {
 		name:         name,
 		pollInterval: pi,
 		lists:        config.Lists,
+		lists_data:   make(map[string]string),
 	}, nil
 }
 
@@ -87,13 +89,13 @@ func (p *Provider) loadConfiguration(ctx context.Context, cfgChan chan<- json.Ma
 	defer ticker.Stop()
 
 	t := time.Now()
-	configuration := generateConfiguration(t, p.lists)
+	configuration := generateConfiguration(t, p.lists, p.lists_data)
 	cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 	for {
 		select {
 		case t := <-ticker.C:
-			configuration := generateConfiguration(t, p.lists)
+			configuration := generateConfiguration(t, p.lists, p.lists_data)
 			cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 		case <-ctx.Done():
@@ -118,7 +120,7 @@ func delete_empty(s []string) []string {
 	return r
 }
 
-func generateConfiguration(date time.Time, lists map[string]string) *dynamic.Configuration {
+func generateConfiguration(date time.Time, lists map[string]string, lists_data map[string]string) *dynamic.Configuration {
 	configuration := &dynamic.Configuration{
 		HTTP: &dynamic.HTTPConfiguration{
 			Routers:           make(map[string]*dynamic.Router),
@@ -141,20 +143,12 @@ func generateConfiguration(date time.Time, lists map[string]string) *dynamic.Con
 		},
 	}
 
-	// http:
-	//   middlewares:
-	//     test-ipwhitelist:
-	//       ipWhiteList:
-	//         sourceRange:
-	//           - "127.0.0.1/32"
-	//           - "192.168.1.7"
-	//         ipStrategy:
-	//           depth: 2
-
+	// fetch list with https GET request
 	for key, element := range lists {
 		// fmt.Println("Key:", key, "=>", "Element:", element)
 
 		resp, err := http.Get("https://wl.portbrella.com/" + element)
+
 		if err != nil {
 			log.Fatalln(err)
 		}
@@ -164,14 +158,14 @@ func generateConfiguration(date time.Time, lists map[string]string) *dynamic.Con
 			log.Fatalln(err)
 		}
 
-		ips := string(body)
+		ips := lists_data[element]
 
-		// splitFn := func(c rune) bool {
-		//       return c == "\n"
-		//}
+		if resp.StatusCode == 200 {
+			ips = string(body)
+			lists_data[element] = ips
+		}
 
 		splitted := delete_empty(strings.Split(ips, "\n"))
-		// splitted := strings.FieldsFunc(ips, splitFn)
 
 		configuration.HTTP.Middlewares[key] = &dynamic.Middleware{
 			IPWhiteList: &dynamic.IPWhiteList{
@@ -185,42 +179,6 @@ func generateConfiguration(date time.Time, lists map[string]string) *dynamic.Con
 			},
 		}
 	}
-
-	// configuration.HTTP.Routers["pp-route-01"] = &dynamic.Router{
-	//     EntryPoints: []string{"web"},
-	//     Service:     "pp-service-01",
-	//     Rule:        "Host(`example.com`)",
-	//   }
-	//
-	//   configuration.HTTP.Services["pp-service-01"] = &dynamic.Service{
-	//     LoadBalancer: &dynamic.ServersLoadBalancer{
-	//       Servers: []dynamic.Server{
-	//         {
-	//           URL: "http://localhost:9090",
-	//         },
-	//       },
-	//       PassHostHeader: boolPtr(true),
-	//     },
-	//   }
-	//
-	//   if date.Minute()%2 == 0 {
-	//     configuration.HTTP.Routers["pp-route-02"] = &dynamic.Router{
-	//       EntryPoints: []string{"web"},
-	//       Service:     "pp-service-02",
-	//       Rule:        "Host(`another.example.com`)",
-	//     }
-	//
-	//     configuration.HTTP.Services["pp-service-02"] = &dynamic.Service{
-	//       LoadBalancer: &dynamic.ServersLoadBalancer{
-	//         Servers: []dynamic.Server{
-	//           {
-	//             URL: "http://localhost:9091",
-	//           },
-	//         },
-	//         PassHostHeader: boolPtr(true),
-	//       },
-	//     }
-	//}
 
 	return configuration
 }

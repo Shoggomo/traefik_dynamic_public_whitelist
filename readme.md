@@ -25,7 +25,7 @@ experimental:
   plugins:
     portbrella:
       moduleName: github.com/portbrella/traefik_whitelist
-      version: v1.0.2
+      version: v1.0.3
 
 providers:
   plugin:
