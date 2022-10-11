@@ -1,7 +1,7 @@
 
-# Portbrella IP Whitelist Provider
+# Portbrella Dynamic Whitelist
 
-Use this Traefik plugin to create IP Whitelist middleware that synchronizes to your Portbrella IP lists.
+Use this Traefik plugin to create a dynamic IP Whitelist middleware that synchronizes to your Portbrella IP lists.
 
 ## Usage
 
