@@ -1,7 +1,7 @@
 
-# Portbrella Whitelist Provider
+# Portbrella IP Whitelist Provider
 
-Use this Traefik plugin to declares IP Whitelist middlewares that synchronize to your Portbrella IP lists.
+Use this Traefik plugin to create IP Whitelist middleware that synchronizes to your Portbrella IP lists.
 
 ## Usage
 
@@ -30,6 +30,21 @@ experimental:
 providers:
   plugin:
     portbrella:
-      mylistname: your_list_id_here
+      list1: your_list_id_here
+      list2: another_list_id_here
 ```
 
+# IP Whitelist Middleware
+
+At that point, Traefik has created list1 and list2 IP Whitelist middleware that can be used to filter traffic.
+
+# Dynamic configuration
+
+In your dynamic configuration, let say with Docker label, you can use that middleware:
+
+```
+labels:
+  - "traefik.http.routers.your_service.middlewares=list1@plugin-portbrella"
+```
+
+In the previous code, replace "your_service" by your service name and replace "list1" by any list you declared in static configuration.
