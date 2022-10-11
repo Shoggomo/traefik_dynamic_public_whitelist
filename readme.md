@@ -35,7 +35,7 @@ providers:
 ```
 
 
-At that point, Traefik has created list1 and list2 IP Whitelist middleware that can be used to filter traffic.
+You must restart Traefik. At that point, Traefik has created list1 and list2 IP Whitelist middleware that can be used to filter traffic.
 
 # Dynamic configuration
 
