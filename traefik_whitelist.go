@@ -23,7 +23,7 @@ type Config struct {
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		PollInterval: "5s", // 5 * time.Second
+		PollInterval: "30s", // 30 * time.Second
 		Lists:        make(map[string]string),
 	}
 }
@@ -86,11 +86,14 @@ func (p *Provider) loadConfiguration(ctx context.Context, cfgChan chan<- json.Ma
 	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 
+	t := time.Now()
+	configuration := generateConfiguration(t, p.lists)
+	cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
+
 	for {
 		select {
 		case t := <-ticker.C:
 			configuration := generateConfiguration(t, p.lists)
-
 			cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 		case <-ctx.Done():
