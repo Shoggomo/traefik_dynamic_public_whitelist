@@ -34,7 +34,6 @@ providers:
       list2: another_list_id_here
 ```
 
-# IP Whitelist Middleware
 
 At that point, Traefik has created list1 and list2 IP Whitelist middleware that can be used to filter traffic.
 
