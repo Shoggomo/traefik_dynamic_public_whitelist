@@ -39,23 +39,6 @@ linters:
     - dupl
     - testpackage
     - tparallel
-    - paralleltest
-    - nlreturn
-    - wsl
-    - exhaustive
-    - exhaustruct
-    - goerr113
-    - wrapcheck
-    - ifshort
-    - noctx
-    - lll
-    - gomnd
-    - forbidigo
-    - varnamelen
-    - varcheck
-    - deadcode
-    - nosnakecase
-    - structcheck
 
 issues:
   exclude-use-default: false

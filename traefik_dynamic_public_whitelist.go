@@ -16,7 +16,7 @@ import (
 // Config the plugin configuration.
 type Config struct {
 	PollInterval string `json:"pollInterval,omitempty"`
-	IPResolver   string `json:"IPResolver,omitempty"`
+	IPResolver   string `json:"ipResolver,omitempty"`
 }
 
 // CreateConfig creates the default plugin configuration.
@@ -46,6 +46,7 @@ func New(ctx context.Context, config *Config, name string) (*Provider, error) {
 	return &Provider{
 		name:         name,
 		pollInterval: pi,
+		ipResolver:   config.IPResolver,
 	}, nil
 }
 
