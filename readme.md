@@ -23,21 +23,19 @@ The following declaration (given here in YAML) defines the plugin:
 
 experimental:
   plugins:
-    dynamic_ip_whitelist:
+    traefik_dynamic_public_whitelist:
       moduleName: github.com/Shoggomo/traefik_dynamic_public_whitelist
-      version: v0.1.0
+      version: v0.1.1
 ```
-
 
 You must restart Traefik.
 
 # Dynamic configuration
 
-In your dynamic configuration, let say with Docker label, you can use that middleware:
+In your dynamic configuration, let's say with a Docker label, you can use that middleware:
 
 ```
 labels:
-  - "traefik.http.routers.my-router.middlewares=dyn-ip-whitelist"
-  - "traefik.http.middlewares.dyn-ip-whitelist.plugin.dynamic_ip_whitelist"
+  - traefik.http.routers.my-router.middlewares=dpw_middleware@plugin-traefik_dynamic_public_whitelist
 ```
 
