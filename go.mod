@@ -1,4 +1,4 @@
-module github.com/portbrella/traefik_whitelist
+module github.com/Shoggomo/traefik_dynamic_public_whitelist
 
 go 1.17
 

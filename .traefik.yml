@@ -1,10 +1,9 @@
-displayName: Portbrella Dynamic Whitelist
+displayName: Public Dynamic IP Whitelist
 type: provider
-iconPath: .assets/logo_v1_mini1.png
 
-import: github.com/portbrella/traefik_whitelist
+import: github.com/Shoggomo/traefik_dynamic_public_whitelist
 
-summary: 'Portbrella Dynamic Whitelist Plugin'
+summary: 'Public Dynamic IP Whitelist Plugin'
 
 testData: {}
   

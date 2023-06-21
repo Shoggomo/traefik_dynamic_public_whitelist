@@ -1,4 +1,4 @@
-package traefik_whitelist
+package traefik_dynamic_public_whitelist
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 
 	"github.com/traefik/genconf/dynamic"
@@ -17,14 +16,14 @@ import (
 // Config the plugin configuration.
 type Config struct {
 	PollInterval string `json:"pollInterval,omitempty"`
-	Lists        map[string]string
+	IPResolver   string `json:"IPResolver,omitempty"`
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		PollInterval: "120s", // 120 * time.Second
-		Lists:        make(map[string]string),
+		PollInterval: "5s", // 5 * time.Second
+		IPResolver:   "https://api.ipify.org?format=text",
 	}
 }
 
@@ -32,8 +31,7 @@ func CreateConfig() *Config {
 type Provider struct {
 	name         string
 	pollInterval time.Duration
-	lists        map[string]string
-	lists_data   map[string]string
+	ipResolver   string
 
 	cancel func()
 }
@@ -48,8 +46,6 @@ func New(ctx context.Context, config *Config, name string) (*Provider, error) {
 	return &Provider{
 		name:         name,
 		pollInterval: pi,
-		lists:        config.Lists,
-		lists_data:   make(map[string]string),
 	}, nil
 }
 
@@ -57,10 +53,6 @@ func New(ctx context.Context, config *Config, name string) (*Provider, error) {
 func (p *Provider) Init() error {
 	if p.pollInterval <= 0 {
 		return fmt.Errorf("poll interval must be greater than 0")
-	}
-
-	if len(p.lists) == 0 {
-		return fmt.Errorf("at least one portbrella list must be configured")
 	}
 
 	return nil
@@ -88,14 +80,13 @@ func (p *Provider) loadConfiguration(ctx context.Context, cfgChan chan<- json.Ma
 	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 
-	t := time.Now()
-	configuration := generateConfiguration(t, p.lists, p.lists_data)
+	configuration := generateConfiguration(p.ipResolver)
 	cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 	for {
 		select {
-		case t := <-ticker.C:
-			configuration := generateConfiguration(t, p.lists, p.lists_data)
+		case <-ticker.C:
+			configuration := generateConfiguration(p.ipResolver)
 			cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 		case <-ctx.Done():
@@ -110,17 +101,24 @@ func (p *Provider) Stop() error {
 	return nil
 }
 
-func delete_empty(s []string) []string {
-	var r []string
-	for _, str := range s {
-		if str != "" {
-			r = append(r, str)
-		}
+func getPublicIp(ipResolver string) (string, error) {
+	resp, err := http.Get(ipResolver)
+	if err != nil {
+		log.Print(err)
+		return "", err
 	}
-	return r
+	defer resp.Body.Close()
+
+	ip, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		log.Print(err)
+		return "", err
+	}
+
+	return string(ip), nil
 }
 
-func generateConfiguration(date time.Time, lists map[string]string, lists_data map[string]string) *dynamic.Configuration {
+func generateConfiguration(ipResolver string) *dynamic.Configuration {
 	configuration := &dynamic.Configuration{
 		HTTP: &dynamic.HTTPConfiguration{
 			Routers:           make(map[string]*dynamic.Router),
@@ -143,46 +141,23 @@ func generateConfiguration(date time.Time, lists map[string]string, lists_data m
 		},
 	}
 
-	// fetch list with https GET request
-	for key, element := range lists {
-		// fmt.Println("Key:", key, "=>", "Element:", element)
+	ip, err := getPublicIp(ipResolver)
 
-		resp, err := http.Get("https://wl.portbrella.com/" + element)
+	if err != nil {
+		log.Fatalln(err)
+	}
 
-		if err != nil {
-			log.Fatalln(err)
-		}
+	configuration.HTTP.Middlewares["dpw_middleware"] = &dynamic.Middleware{
+		IPWhiteList: &dynamic.IPWhiteList{
+			SourceRange: []string{ip},
+		},
+	}
 
-		body, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
-			log.Fatalln(err)
-		}
-
-		ips := lists_data[element]
-
-		if resp.StatusCode == 200 {
-			ips = string(body)
-			lists_data[element] = ips
-		}
-
-		splitted := delete_empty(strings.Split(ips, "\n"))
-
-		configuration.HTTP.Middlewares[key] = &dynamic.Middleware{
-			IPWhiteList: &dynamic.IPWhiteList{
-				SourceRange: splitted,
-			},
-		}
-
-		configuration.TCP.Middlewares[key] = &dynamic.TCPMiddleware{
-			IPWhiteList: &dynamic.TCPIPWhiteList{
-				SourceRange: splitted,
-			},
-		}
+	configuration.TCP.Middlewares["dpw_middleware"] = &dynamic.TCPMiddleware{
+		IPWhiteList: &dynamic.TCPIPWhiteList{
+			SourceRange: []string{ip},
+		},
 	}
 
 	return configuration
-}
-
-func boolPtr(v bool) *bool {
-	return &v
 }

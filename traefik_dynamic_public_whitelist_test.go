@@ -1,26 +1,32 @@
-package traefik_whitelist_test
+package traefik_dynamic_public_whitelist_test
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	//"time"
 
-	"github.com/portbrella/traefik_whitelist"
+	"github.com/Shoggomo/traefik_dynamic_public_whitelist"
 	"github.com/traefik/genconf/dynamic"
 	"github.com/traefik/genconf/dynamic/tls"
 )
 
 func TestNew(t *testing.T) {
-	config := traefik_whitelist.CreateConfig()
+	// Create a test server to mock the HTTP endpoint
+	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		println("Request!")
+		w.Write([]byte("192.0.2.123")) // Mock response with a sample IP address
+	}))
+	defer mockServer.Close()
+
+	config := traefik_dynamic_public_whitelist.CreateConfig()
 	config.PollInterval = "1s"
+	config.IPResolver = mockServer.URL
 
-	m := make(map[string]string)
-	m["list1"] = "mec"
-	config.Lists = m
-
-	provider, err := traefik_whitelist.New(context.Background(), config, "test")
+	provider, err := traefik_dynamic_public_whitelist.New(context.Background(), config, "test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -51,9 +57,9 @@ func TestNew(t *testing.T) {
 			Routers:  make(map[string]*dynamic.Router),
 			Services: make(map[string]*dynamic.Service),
 			Middlewares: map[string]*dynamic.Middleware{
-				"list1": &dynamic.Middleware{
+				"dpw_middleware": {
 					IPWhiteList: &dynamic.IPWhiteList{
-						SourceRange: []string{"10.0.0.3", "10.0.0.4"},
+						SourceRange: []string{"192.0.2.123"},
 					},
 				},
 			},
@@ -63,9 +69,9 @@ func TestNew(t *testing.T) {
 			Routers:  make(map[string]*dynamic.TCPRouter),
 			Services: make(map[string]*dynamic.TCPService),
 			Middlewares: map[string]*dynamic.TCPMiddleware{
-				"list1": &dynamic.TCPMiddleware{
+				"dpw_middleware": {
 					IPWhiteList: &dynamic.TCPIPWhiteList{
-						SourceRange: []string{"10.0.0.3", "10.0.0.4"},
+						SourceRange: []string{"192.0.2.123"},
 					},
 				},
 			},
@@ -79,25 +85,6 @@ func TestNew(t *testing.T) {
 			Services: make(map[string]*dynamic.UDPService),
 		},
 	}
-
-	// if time.Now().Minute()%2 == 0 {
-	//     expected.HTTP.Routers["pp-route-02"] = &dynamic.Router{
-	//       EntryPoints: []string{"web"},
-	//       Service:     "pp-service-02",
-	//       Rule:        "Host(`another.example.com`)",
-	//     }
-	//
-	//     expected.HTTP.Services["pp-service-02"] = &dynamic.Service{
-	//       LoadBalancer: &dynamic.ServersLoadBalancer{
-	//         Servers: []dynamic.Server{
-	//           {
-	//             URL: "http://localhost:9091",
-	//           },
-	//         },
-	//         PassHostHeader: boolPtr(true),
-	//       },
-	//     }
-	//   }
 
 	expectedJSON, err := json.MarshalIndent(expected, "", "  ")
 	if err != nil {

@@ -52,6 +52,10 @@ linters:
     - gomnd
     - forbidigo
     - varnamelen
+    - varcheck
+    - deadcode
+    - nosnakecase
+    - structcheck
 
 issues:
   exclude-use-default: false
