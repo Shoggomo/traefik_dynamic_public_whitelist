@@ -17,13 +17,18 @@ import (
 type Config struct {
 	PollInterval string `json:"pollInterval,omitempty"`
 	IPResolver   string `json:"ipResolver,omitempty"`
+	IPStrategy   dynamic.IPStrategy
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		PollInterval: "5s", // 5 * time.Second
+		PollInterval: "300s",
 		IPResolver:   "https://api.ipify.org?format=text",
+		IPStrategy: dynamic.IPStrategy{
+			Depth:       0,
+			ExcludedIPs: nil,
+		},
 	}
 }
 
@@ -32,6 +37,7 @@ type Provider struct {
 	name         string
 	pollInterval time.Duration
 	ipResolver   string
+	ipStrategy   dynamic.IPStrategy
 
 	cancel func()
 }
@@ -47,6 +53,7 @@ func New(ctx context.Context, config *Config, name string) (*Provider, error) {
 		name:         name,
 		pollInterval: pi,
 		ipResolver:   config.IPResolver,
+		ipStrategy:   config.IPStrategy,
 	}, nil
 }
 
@@ -81,13 +88,13 @@ func (p *Provider) loadConfiguration(ctx context.Context, cfgChan chan<- json.Ma
 	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 
-	configuration := generateConfiguration(p.ipResolver)
+	configuration := generateConfiguration(p.ipResolver, p.ipStrategy)
 	cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 	for {
 		select {
 		case <-ticker.C:
-			configuration := generateConfiguration(p.ipResolver)
+			configuration := generateConfiguration(p.ipResolver, p.ipStrategy)
 			cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 		case <-ctx.Done():
@@ -119,7 +126,7 @@ func getPublicIp(ipResolver string) (string, error) {
 	return string(ip), nil
 }
 
-func generateConfiguration(ipResolver string) *dynamic.Configuration {
+func generateConfiguration(ipResolver string, ipStrategy dynamic.IPStrategy) *dynamic.Configuration {
 	configuration := &dynamic.Configuration{
 		HTTP: &dynamic.HTTPConfiguration{
 			Routers:           make(map[string]*dynamic.Router),
@@ -128,9 +135,8 @@ func generateConfiguration(ipResolver string) *dynamic.Configuration {
 			ServersTransports: make(map[string]*dynamic.ServersTransport),
 		},
 		TCP: &dynamic.TCPConfiguration{
-			Routers:     make(map[string]*dynamic.TCPRouter),
-			Services:    make(map[string]*dynamic.TCPService),
-			Middlewares: make(map[string]*dynamic.TCPMiddleware),
+			Routers:  make(map[string]*dynamic.TCPRouter),
+			Services: make(map[string]*dynamic.TCPService),
 		},
 		TLS: &dynamic.TLSConfiguration{
 			Stores:  make(map[string]tls.Store),
@@ -148,15 +154,13 @@ func generateConfiguration(ipResolver string) *dynamic.Configuration {
 		log.Fatalln(err)
 	}
 
-	configuration.HTTP.Middlewares["dpw_middleware"] = &dynamic.Middleware{
+	configuration.HTTP.Middlewares["public_ipwhitelist"] = &dynamic.Middleware{
 		IPWhiteList: &dynamic.IPWhiteList{
 			SourceRange: []string{ip},
-		},
-	}
-
-	configuration.TCP.Middlewares["dpw_middleware"] = &dynamic.TCPMiddleware{
-		IPWhiteList: &dynamic.TCPIPWhiteList{
-			SourceRange: []string{ip},
+			IPStrategy: &dynamic.IPStrategy{
+				Depth:       ipStrategy.Depth,
+				ExcludedIPs: ipStrategy.ExcludedIPs,
+			},
 		},
 	}
 

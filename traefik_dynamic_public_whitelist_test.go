@@ -17,7 +17,6 @@ import (
 func TestNew(t *testing.T) {
 	// Create a test server to mock the HTTP endpoint
 	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		println("Request!")
 		w.Write([]byte("192.0.2.123")) // Mock response with a sample IP address
 	}))
 	defer mockServer.Close()
@@ -25,6 +24,10 @@ func TestNew(t *testing.T) {
 	config := traefik_dynamic_public_whitelist.CreateConfig()
 	config.PollInterval = "1s"
 	config.IPResolver = mockServer.URL
+	config.IPStrategy = dynamic.IPStrategy{
+		Depth:       1,
+		ExcludedIPs: []string{"123.0.0.1"},
+	}
 
 	provider, err := traefik_dynamic_public_whitelist.New(context.Background(), config, "test")
 	if err != nil {
@@ -57,9 +60,13 @@ func TestNew(t *testing.T) {
 			Routers:  make(map[string]*dynamic.Router),
 			Services: make(map[string]*dynamic.Service),
 			Middlewares: map[string]*dynamic.Middleware{
-				"dpw_middleware": {
+				"public_ipwhitelist": {
 					IPWhiteList: &dynamic.IPWhiteList{
 						SourceRange: []string{"192.0.2.123"},
+						IPStrategy: &dynamic.IPStrategy{
+							Depth:       1,
+							ExcludedIPs: []string{"123.0.0.1"},
+						},
 					},
 				},
 			},
@@ -68,13 +75,6 @@ func TestNew(t *testing.T) {
 		TCP: &dynamic.TCPConfiguration{
 			Routers:  make(map[string]*dynamic.TCPRouter),
 			Services: make(map[string]*dynamic.TCPService),
-			Middlewares: map[string]*dynamic.TCPMiddleware{
-				"dpw_middleware": {
-					IPWhiteList: &dynamic.TCPIPWhiteList{
-						SourceRange: []string{"192.0.2.123"},
-					},
-				},
-			},
 		},
 		TLS: &dynamic.TLSConfiguration{
 			Stores:  make(map[string]tls.Store),
