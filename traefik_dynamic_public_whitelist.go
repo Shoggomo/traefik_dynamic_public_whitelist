@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/traefik/genconf/dynamic"
@@ -15,16 +17,20 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	PollInterval string `json:"pollInterval,omitempty"`
-	IPResolver   string `json:"ipResolver,omitempty"`
-	IPStrategy   dynamic.IPStrategy
+	PollInterval  string `json:"pollInterval,omitempty"`
+	IPv4Resolver  string `json:"ipv4Resolver,omitempty"`
+	IPv6Resolver  string `json:"ipv6Resolver,omitempty"`
+	WhitelistIPv6 bool   `json:"whitelistIPv6,omitempty"`
+	IPStrategy    dynamic.IPStrategy
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		PollInterval: "300s",
-		IPResolver:   "https://api.ipify.org?format=text",
+		PollInterval:  "300s",
+		IPv4Resolver:  "https://api.ipify.org?format=text",
+		IPv6Resolver:  "https://api64.ipify.org?format=text",
+		WhitelistIPv6: true,
 		IPStrategy: dynamic.IPStrategy{
 			Depth:       0,
 			ExcludedIPs: nil,
@@ -34,10 +40,12 @@ func CreateConfig() *Config {
 
 // Provider a simple provider plugin.
 type Provider struct {
-	name         string
-	pollInterval time.Duration
-	ipResolver   string
-	ipStrategy   dynamic.IPStrategy
+	name          string
+	pollInterval  time.Duration
+	ipv4Resolver  string
+	ipv6Resolver  string
+	whitelistIPv6 bool
+	ipStrategy    dynamic.IPStrategy
 
 	cancel func()
 }
@@ -50,10 +58,12 @@ func New(ctx context.Context, config *Config, name string) (*Provider, error) {
 	}
 
 	return &Provider{
-		name:         name,
-		pollInterval: pi,
-		ipResolver:   config.IPResolver,
-		ipStrategy:   config.IPStrategy,
+		name:          name,
+		pollInterval:  pi,
+		ipv4Resolver:  config.IPv4Resolver,
+		ipv6Resolver:  config.IPv6Resolver,
+		whitelistIPv6: config.WhitelistIPv6,
+		ipStrategy:    config.IPStrategy,
 	}, nil
 }
 
@@ -88,13 +98,13 @@ func (p *Provider) loadConfiguration(ctx context.Context, cfgChan chan<- json.Ma
 	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 
-	configuration := generateConfiguration(p.ipResolver, p.ipStrategy)
+	configuration := generateConfiguration(p.ipv4Resolver, p.ipv6Resolver, p.whitelistIPv6, p.ipStrategy)
 	cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 	for {
 		select {
 		case <-ticker.C:
-			configuration := generateConfiguration(p.ipResolver, p.ipStrategy)
+			configuration := generateConfiguration(p.ipv4Resolver, p.ipv6Resolver, p.whitelistIPv6, p.ipStrategy)
 			cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 		case <-ctx.Done():
@@ -109,24 +119,84 @@ func (p *Provider) Stop() error {
 	return nil
 }
 
-func getPublicIp(ipResolver string) (string, error) {
-	resp, err := http.Get(ipResolver)
+type IPAddresses struct {
+	v4     string
+	v6CIDR string
+}
+
+func ipv6ToCIDR(ipv6 string) (string, error) {
+	const MaskSize = 64 // most providers supply 64 bit ipv6 addresses
+
+	ip := net.ParseIP(ipv6)
+	ip = ip.To16()
+
+	if ip == nil {
+		return "", fmt.Errorf("input is not an IPv6 address: %s", ipv6)
+	}
+
+	cidr := ip.Mask(net.CIDRMask(MaskSize, 128)).String() + "/" + strconv.Itoa(MaskSize)
+
+	return cidr, nil
+}
+
+func getPublicIp(ipv4Resolver string, ipv6Resolver string, whitelistIpv6 bool) (IPAddresses, error) {
+	ipv4, err := getBody(ipv4Resolver)
+
+	if err != nil {
+		return IPAddresses{}, err
+	}
+
+	if net.ParseIP(ipv4) == nil {
+		return IPAddresses{}, fmt.Errorf("could not parse resolver response")
+	}
+
+	if !whitelistIpv6 {
+		return IPAddresses{
+			v4:     ipv4,
+			v6CIDR: "",
+		}, nil
+	}
+
+	ipv6, err := getBody(ipv6Resolver)
+
+	if err != nil {
+		return IPAddresses{}, err
+	}
+
+	if net.ParseIP(ipv6) == nil {
+		return IPAddresses{}, fmt.Errorf("could not parse resolver response")
+	}
+
+	ipv6CIDR, err := ipv6ToCIDR(ipv6)
+
+	if err != nil {
+		return IPAddresses{}, err
+	}
+
+	return IPAddresses{
+		v4:     ipv4,
+		v6CIDR: ipv6CIDR,
+	}, nil
+}
+
+func getBody(address string) (string, error) {
+	resp, err := http.Get(address)
 	if err != nil {
 		log.Print(err)
 		return "", err
 	}
 	defer resp.Body.Close()
 
-	ip, err := ioutil.ReadAll(resp.Body)
+	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Print(err)
 		return "", err
 	}
 
-	return string(ip), nil
+	return string(body), nil
 }
 
-func generateConfiguration(ipResolver string, ipStrategy dynamic.IPStrategy) *dynamic.Configuration {
+func generateConfiguration(ipv4Resolver string, ipv6Resolver string, whitelistIPv6 bool, ipStrategy dynamic.IPStrategy) *dynamic.Configuration {
 	configuration := &dynamic.Configuration{
 		HTTP: &dynamic.HTTPConfiguration{
 			Routers:           make(map[string]*dynamic.Router),
@@ -148,7 +218,14 @@ func generateConfiguration(ipResolver string, ipStrategy dynamic.IPStrategy) *dy
 		},
 	}
 
-	ip, err := getPublicIp(ipResolver)
+	ipAddresses, err := getPublicIp(ipv4Resolver, ipv6Resolver, whitelistIPv6)
+
+	sourceRange := make([]string, 0, 2)
+	sourceRange = append(sourceRange, ipAddresses.v4)
+
+	if whitelistIPv6 {
+		sourceRange = append(sourceRange, ipAddresses.v6CIDR)
+	}
 
 	if err != nil {
 		log.Fatalln(err)
@@ -156,7 +233,7 @@ func generateConfiguration(ipResolver string, ipStrategy dynamic.IPStrategy) *dy
 
 	configuration.HTTP.Middlewares["public_ipwhitelist"] = &dynamic.Middleware{
 		IPWhiteList: &dynamic.IPWhiteList{
-			SourceRange: []string{ip},
+			SourceRange: sourceRange,
 			IPStrategy: &dynamic.IPStrategy{
 				Depth:       ipStrategy.Depth,
 				ExcludedIPs: ipStrategy.ExcludedIPs,

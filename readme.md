@@ -31,11 +31,13 @@ providers:
   plugin:
     traefik_dynamic_public_whitelist:
       ipStrategy:
-        pollInterval: "120s"                               # optional, default is "300s"
-        ipResolver: "https://api.ipify.org?format=text"    # optional, default is "https://api.ipify.org?format=text" (needs to provide only the public ip on request)
-        ipStrategy:                                        # optional, see https://doc.traefik.io/traefik/middlewares/http/ipwhitelist/#configuration-options for more info
-          depth: 0                                         # optional
-          excludedIPs: nil                                 # optional
+        pollInterval: "120s"                                 # optional, default is "300s"
+        ipv4Resolver: "https://api.ipify.org?format=text"    # optional, default is "https://api.ipify.org?format=text" (needs to provide only the public ip on request)
+        ipv6Resolver: "https://api64.ipify.org?format=text"  # optional, default is "https://api64.ipify.org?format=text" (needs to provide only the public ip on request)
+        whitelistIPv6: true                                  # optional, default is true
+        ipStrategy:                                          # optional, see https://doc.traefik.io/traefik/middlewares/http/ipwhitelist/#configuration-options for more info
+          depth: 0                                           # optional
+          excludedIPs: nil                                   # optional
 ```
 
 You must restart Traefik.

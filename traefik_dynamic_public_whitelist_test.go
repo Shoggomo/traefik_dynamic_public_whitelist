@@ -16,14 +16,21 @@ import (
 
 func TestNew(t *testing.T) {
 	// Create a test server to mock the HTTP endpoint
-	mockServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	mockServerv4 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("192.0.2.123")) // Mock response with a sample IP address
 	}))
-	defer mockServer.Close()
+	defer mockServerv4.Close()
+
+	mockServerv6 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("1234:1234:1234:1234:1234:1234:1234:1234")) // Mock response with a sample IP address
+	}))
+	defer mockServerv6.Close()
 
 	config := traefik_dynamic_public_whitelist.CreateConfig()
 	config.PollInterval = "1s"
-	config.IPResolver = mockServer.URL
+	config.IPv4Resolver = mockServerv4.URL
+	config.IPv6Resolver = mockServerv6.URL
+	config.WhitelistIPv6 = true
 	config.IPStrategy = dynamic.IPStrategy{
 		Depth:       1,
 		ExcludedIPs: []string{"123.0.0.1"},
@@ -62,7 +69,7 @@ func TestNew(t *testing.T) {
 			Middlewares: map[string]*dynamic.Middleware{
 				"public_ipwhitelist": {
 					IPWhiteList: &dynamic.IPWhiteList{
-						SourceRange: []string{"192.0.2.123"},
+						SourceRange: []string{"192.0.2.123", "1234:1234:1234:1234::/64"},
 						IPStrategy: &dynamic.IPStrategy{
 							Depth:       1,
 							ExcludedIPs: []string{"123.0.0.1"},
