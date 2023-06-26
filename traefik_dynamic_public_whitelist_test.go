@@ -31,6 +31,7 @@ func TestNew(t *testing.T) {
 	config.IPv4Resolver = mockServerv4.URL
 	config.IPv6Resolver = mockServerv6.URL
 	config.WhitelistIPv6 = true
+	config.AdditionalSourceRange = []string{"127.0.0.1/32", "192.168.0.24"}
 	config.IPStrategy = dynamic.IPStrategy{
 		Depth:       1,
 		ExcludedIPs: []string{"123.0.0.1"},
@@ -69,7 +70,7 @@ func TestNew(t *testing.T) {
 			Middlewares: map[string]*dynamic.Middleware{
 				"public_ipwhitelist": {
 					IPWhiteList: &dynamic.IPWhiteList{
-						SourceRange: []string{"192.0.2.123", "1234:1234:1234:1234::/64"},
+						SourceRange: []string{"127.0.0.1/32", "192.168.0.24", "192.0.2.123", "1234:1234:1234:1234::/64"},
 						IPStrategy: &dynamic.IPStrategy{
 							Depth:       1,
 							ExcludedIPs: []string{"123.0.0.1"},

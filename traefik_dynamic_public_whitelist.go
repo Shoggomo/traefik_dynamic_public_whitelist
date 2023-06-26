@@ -17,20 +17,22 @@ import (
 
 // Config the plugin configuration.
 type Config struct {
-	PollInterval  string `json:"pollInterval,omitempty"`
-	IPv4Resolver  string `json:"ipv4Resolver,omitempty"`
-	IPv6Resolver  string `json:"ipv6Resolver,omitempty"`
-	WhitelistIPv6 bool   `json:"whitelistIPv6,omitempty"`
-	IPStrategy    dynamic.IPStrategy
+	PollInterval          string   `json:"pollInterval,omitempty"`
+	IPv4Resolver          string   `json:"ipv4Resolver,omitempty"`
+	IPv6Resolver          string   `json:"ipv6Resolver,omitempty"`
+	WhitelistIPv6         bool     `json:"whitelistIPv6,omitempty"`
+	AdditionalSourceRange []string `json:"additionalSourceRange,omitempty"`
+	IPStrategy            dynamic.IPStrategy
 }
 
 // CreateConfig creates the default plugin configuration.
 func CreateConfig() *Config {
 	return &Config{
-		PollInterval:  "300s",
-		IPv4Resolver:  "https://api4.ipify.org/?format=text",
-		IPv6Resolver:  "https://api6.ipify.org/?format=text",
-		WhitelistIPv6: false,
+		PollInterval:          "300s",
+		IPv4Resolver:          "https://api4.ipify.org/?format=text",
+		IPv6Resolver:          "https://api6.ipify.org/?format=text",
+		WhitelistIPv6:         false,
+		AdditionalSourceRange: []string{},
 		IPStrategy: dynamic.IPStrategy{
 			Depth:       0,
 			ExcludedIPs: nil,
@@ -40,12 +42,13 @@ func CreateConfig() *Config {
 
 // Provider a simple provider plugin.
 type Provider struct {
-	name          string
-	pollInterval  time.Duration
-	ipv4Resolver  string
-	ipv6Resolver  string
-	whitelistIPv6 bool
-	ipStrategy    dynamic.IPStrategy
+	name                  string
+	pollInterval          time.Duration
+	ipv4Resolver          string
+	ipv6Resolver          string
+	whitelistIPv6         bool
+	additionalSourceRange []string
+	ipStrategy            dynamic.IPStrategy
 
 	cancel func()
 }
@@ -58,12 +61,13 @@ func New(ctx context.Context, config *Config, name string) (*Provider, error) {
 	}
 
 	return &Provider{
-		name:          name,
-		pollInterval:  pi,
-		ipv4Resolver:  config.IPv4Resolver,
-		ipv6Resolver:  config.IPv6Resolver,
-		whitelistIPv6: config.WhitelistIPv6,
-		ipStrategy:    config.IPStrategy,
+		name:                  name,
+		pollInterval:          pi,
+		ipv4Resolver:          config.IPv4Resolver,
+		ipv6Resolver:          config.IPv6Resolver,
+		whitelistIPv6:         config.WhitelistIPv6,
+		additionalSourceRange: config.AdditionalSourceRange,
+		ipStrategy:            config.IPStrategy,
 	}, nil
 }
 
@@ -98,13 +102,13 @@ func (p *Provider) loadConfiguration(ctx context.Context, cfgChan chan<- json.Ma
 	ticker := time.NewTicker(p.pollInterval)
 	defer ticker.Stop()
 
-	configuration := generateConfiguration(p.ipv4Resolver, p.ipv6Resolver, p.whitelistIPv6, p.ipStrategy)
+	configuration := generateConfiguration(p)
 	cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 	for {
 		select {
 		case <-ticker.C:
-			configuration := generateConfiguration(p.ipv4Resolver, p.ipv6Resolver, p.whitelistIPv6, p.ipStrategy)
+			configuration := generateConfiguration(p)
 			cfgChan <- &dynamic.JSONPayload{Configuration: configuration}
 
 		case <-ctx.Done():
@@ -201,7 +205,7 @@ func getBody(address string) (string, error) {
 	return string(body), nil
 }
 
-func generateConfiguration(ipv4Resolver string, ipv6Resolver string, whitelistIPv6 bool, ipStrategy dynamic.IPStrategy) *dynamic.Configuration {
+func generateConfiguration(provider *Provider) *dynamic.Configuration {
 	configuration := &dynamic.Configuration{
 		HTTP: &dynamic.HTTPConfiguration{
 			Routers:           make(map[string]*dynamic.Router),
@@ -223,12 +227,11 @@ func generateConfiguration(ipv4Resolver string, ipv6Resolver string, whitelistIP
 		},
 	}
 
-	ipAddresses, err := getPublicIp(ipv4Resolver, ipv6Resolver, whitelistIPv6)
+	ipAddresses, err := getPublicIp(provider.ipv4Resolver, provider.ipv6Resolver, provider.whitelistIPv6)
 
-	sourceRange := make([]string, 0, 2)
-	sourceRange = append(sourceRange, ipAddresses.v4)
+	sourceRange := append(provider.additionalSourceRange, ipAddresses.v4)
 
-	if whitelistIPv6 {
+	if provider.whitelistIPv6 {
 		sourceRange = append(sourceRange, ipAddresses.v6CIDR)
 	}
 
@@ -240,8 +243,8 @@ func generateConfiguration(ipv4Resolver string, ipv6Resolver string, whitelistIP
 		IPWhiteList: &dynamic.IPWhiteList{
 			SourceRange: sourceRange,
 			IPStrategy: &dynamic.IPStrategy{
-				Depth:       ipStrategy.Depth,
-				ExcludedIPs: ipStrategy.ExcludedIPs,
+				Depth:       provider.ipStrategy.Depth,
+				ExcludedIPs: provider.ipStrategy.ExcludedIPs,
 			},
 		},
 	}
