@@ -28,9 +28,9 @@ type Config struct {
 func CreateConfig() *Config {
 	return &Config{
 		PollInterval:  "300s",
-		IPv4Resolver:  "https://api.ipify.org?format=text",
-		IPv6Resolver:  "https://api64.ipify.org?format=text",
-		WhitelistIPv6: true,
+		IPv4Resolver:  "https://api4.ipify.org/?format=text",
+		IPv6Resolver:  "https://api6.ipify.org/?format=text",
+		WhitelistIPv6: false,
 		IPStrategy: dynamic.IPStrategy{
 			Depth:       0,
 			ExcludedIPs: nil,
@@ -128,6 +128,11 @@ func ipv6ToCIDR(ipv6 string) (string, error) {
 	const MaskSize = 64 // most providers supply 64 bit ipv6 addresses
 
 	ip := net.ParseIP(ipv6)
+
+	if ip.To4() != nil {
+		return "", fmt.Errorf("input is not an IPv6 address: %s", ipv6)
+	}
+
 	ip = ip.To16()
 
 	if ip == nil {
